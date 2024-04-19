@@ -199,9 +199,6 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
                 allocatorFactory,
                 restartBackoffTimeStrategy,
                 new ScheduledExecutorServiceAdapter(futureExecutor),
-                DefaultVertexParallelismAndInputInfosDecider.from(
-                        getDefaultMaxParallelism(jobMasterConfiguration, executionConfig),
-                        jobMasterConfiguration),
                 jobRecoveryHandler);
     }
 
@@ -230,7 +227,6 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
             ExecutionSlotAllocatorFactory allocatorFactory,
             RestartBackoffTimeStrategy restartBackoffTimeStrategy,
             ScheduledExecutor delayExecutor,
-            VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider,
             BatchJobRecoveryHandler jobRecoveryHandler)
             throws Exception {
 
@@ -297,7 +293,7 @@ public class AdaptiveBatchSchedulerFactory implements SchedulerNGFactory {
                 executionGraphFactory,
                 shuffleMaster,
                 rpcTimeout,
-                vertexParallelismAndInputInfosDecider,
+                executionConfig,
                 defaultMaxParallelism,
                 blocklistOperations,
                 hybridPartitionDataConsumeConstraint,

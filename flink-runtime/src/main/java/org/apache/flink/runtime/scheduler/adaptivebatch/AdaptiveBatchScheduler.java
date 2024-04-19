@@ -162,7 +162,7 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
             final ExecutionGraphFactory executionGraphFactory,
             final ShuffleMaster<?> shuffleMaster,
             final Duration rpcTimeout,
-            final VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider,
+            final ExecutionConfig executionConfig,
             final int defaultMaxParallelism,
             final BlocklistOperations blocklistOperations,
             final HybridPartitionDataConsumeConstraint hybridPartitionDataConsumeConstraint,
@@ -201,7 +201,11 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
         this.logicalTopology = DefaultLogicalTopology.fromJobGraph(jobGraph);
 
         this.vertexParallelismAndInputInfosDecider =
-                checkNotNull(vertexParallelismAndInputInfosDecider);
+                DefaultVertexParallelismAndInputInfosDecider.from(
+                        getExecutionGraph().getAllVertices(),
+                        AdaptiveBatchSchedulerFactory.getDefaultMaxParallelism(
+                                jobMasterConfiguration, executionConfig),
+                        jobMasterConfiguration);
 
         this.forwardGroupsByJobVertexId = checkNotNull(forwardGroupsByJobVertexId);
 

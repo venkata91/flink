@@ -22,6 +22,7 @@ import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.configuration.BatchExecutionOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.executiongraph.ExecutionVertexInputInfo;
 import org.apache.flink.runtime.executiongraph.IndexRange;
 import org.apache.flink.runtime.executiongraph.JobVertexInputInfo;
@@ -75,12 +76,14 @@ public class DefaultVertexParallelismAndInputInfosDecider
      */
     private static final int MAX_NUM_SUBPARTITIONS_PER_TASK_CONSUME = 32768;
 
+    private final Map<JobVertexID, ExecutionJobVertex> executionJobVertices;
     private final int globalMaxParallelism;
     private final int globalMinParallelism;
     private final long dataVolumePerTask;
     private final int globalDefaultSourceParallelism;
 
     private DefaultVertexParallelismAndInputInfosDecider(
+            Map<JobVertexID, ExecutionJobVertex> executionJobVertices,
             int globalMaxParallelism,
             int globalMinParallelism,
             MemorySize dataVolumePerTask,
@@ -95,6 +98,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
                 "The default source parallelism must be larger than 0.");
         checkNotNull(dataVolumePerTask);
 
+        this.executionJobVertices = executionJobVertices;
         this.globalMaxParallelism = globalMaxParallelism;
         this.globalMinParallelism = globalMinParallelism;
         this.dataVolumePerTask = dataVolumePerTask.getBytes();
@@ -176,18 +180,17 @@ public class DefaultVertexParallelismAndInputInfosDecider
 
     @Override
     public int computeSourceParallelismUpperBound(JobVertexID jobVertexId, int maxParallelism) {
-        if (globalDefaultSourceParallelism > maxParallelism) {
-            LOG.info(
-                    "The global default source parallelism {} is larger than the maximum parallelism {}. "
-                            + "Use {} as the upper bound parallelism of source job vertex {}.",
-                    globalDefaultSourceParallelism,
-                    maxParallelism,
-                    maxParallelism,
-                    jobVertexId);
-            return maxParallelism;
-        } else {
+        ExecutionJobVertex executionJobVertex = executionJobVertices.get(jobVertexId);
+
+        // Check if upper bound parallelism should be computed or not?
+        // maxParallelism should not be computed, if user already sets the maxParallelism
+        // for the source vertex
+        if (executionJobVertex.canRescaleMaxParallelism(maxParallelism)) {
+            executionJobVertex.setMaxParallelism(globalDefaultSourceParallelism);
             return globalDefaultSourceParallelism;
         }
+
+        return executionJobVertex.getMaxParallelism();
     }
 
     @Override
@@ -551,8 +554,11 @@ public class DefaultVertexParallelismAndInputInfosDecider
     }
 
     static DefaultVertexParallelismAndInputInfosDecider from(
-            int maxParallelism, Configuration configuration) {
+            Map<JobVertexID, ExecutionJobVertex> executionJobVertices,
+            int maxParallelism,
+            Configuration configuration) {
         return new DefaultVertexParallelismAndInputInfosDecider(
+                executionJobVertices,
                 maxParallelism,
                 configuration.get(BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_MIN_PARALLELISM),
                 configuration.get(
