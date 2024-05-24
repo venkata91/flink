@@ -18,9 +18,12 @@
 
 package org.apache.flink.table.planner.runtime.batch.sql;
 
+import java.util.concurrent.ExecutionException;
+
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.planner.factories.utils.TestCollectionTableFactory;
 import org.apache.flink.table.planner.runtime.utils.BatchTestBase;
+import org.apache.flink.table.runtime.functions.aggregate.EarliestRecordAggFunction;
 import org.apache.flink.types.Row;
 import org.apache.flink.util.UserClassLoaderJarTestUtils;
 
@@ -138,5 +141,38 @@ class FunctionITCase extends BatchTestBase {
 
         // delete the function
         tEnv().executeSql(dropFunctionDDL);
+    }
+
+    @Test
+    public void testEarliestAggFunc() throws ExecutionException, InterruptedException {
+        final List<Row> sourceData =
+                Arrays.asList(
+                        Row.of(100000L, 100, Row.of("a", "a1")),
+                        Row.of(20000L, 200, Row.of("b", "b1")),
+                        Row.of(200L, 200, Row.of("c", "c1")),
+                        Row.of(300L, 100, Row.of("d", "d1")));
+
+        final List<Row> sinkData =
+                Arrays.asList(
+                        Row.of(300L, 100, Row.of("d", "d1")),
+                        Row.of(200L, 200, Row.of("c", "c1")));
+
+        TestCollectionTableFactory.reset();
+        TestCollectionTableFactory.initData(sourceData);
+
+        tEnv().executeSql(
+                "CREATE TABLE SourceTable(f0 BIGINT, f1 INT,"
+                        + "f2 ROW<`a` STRING, `b` STRING>) WITH ('connector' = 'COLLECTION')");
+        tEnv().executeSql(
+                "CREATE TABLE SinkTable(f0 BIGINT, f1 INT,"
+                        + "f2 ROW<`a` STRING, `b` STRING>) WITH ('connector' = 'COLLECTION')");
+
+        tEnv().createTemporarySystemFunction("EarliestAggFunction", EarliestRecordAggFunction.class);
+        Table t2 = tEnv().sqlQuery( "SELECT earliest.* FROM"
+                + " (SELECT EarliestAggFunction(f0, f1, f2) AS earliest FROM SourceTable GROUP BY f1)");
+        t2.executeInsert("SinkTable").await();
+        List<Row> result = TestCollectionTableFactory.RESULT();
+
+        assertThat(result).isEqualTo(sinkData);
     }
 }
