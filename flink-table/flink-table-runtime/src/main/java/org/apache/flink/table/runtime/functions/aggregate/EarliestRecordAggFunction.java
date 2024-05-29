@@ -18,47 +18,39 @@
 
 package org.apache.flink.table.runtime.functions.aggregate;
 
-import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.catalog.DataTypeFactory;
+import org.apache.flink.table.annotation.DataTypeHint;
+import org.apache.flink.table.annotation.FunctionHint;
+import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.functions.AggregateFunction;
-import org.apache.flink.table.functions.FunctionDefinition;
-import org.apache.flink.table.types.DataType;
-import org.apache.flink.table.types.inference.ArgumentCount;
-import org.apache.flink.table.types.inference.CallContext;
-import org.apache.flink.table.types.inference.ConstantArgumentCount;
-import org.apache.flink.table.types.inference.InputTypeStrategy;
-import org.apache.flink.table.types.inference.Signature;
-import org.apache.flink.table.types.inference.TypeInference;
-import org.apache.flink.table.types.logical.LogicalTypeRoot;
-import org.apache.flink.types.Row;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.IntStream;
-
-public class EarliestRecordAggFunction extends AggregateFunction<Row, EarliestRecordAggFunction.Accumulator> {
+@FunctionHint(
+        input = {
+            @DataTypeHint("BIGINT"),
+            @DataTypeHint("INT"),
+            @DataTypeHint(value = "ROW<`a` STRING, `b` STRING>", bridgedTo = RowData.class) },
+        output = @DataTypeHint(value = "ROW<`f0` BIGINT, `f1` INT, f2 ROW<`a` STRING, `b` STRING>>",
+                bridgedTo = RowData.class))
+public class EarliestRecordAggFunction
+        extends AggregateFunction<RowData, EarliestRecordAggFunction.Accumulator> {
     @Override
     public Accumulator createAccumulator() {
         return new Accumulator();
     }
 
-    public void accumulate(Accumulator acc, long timestamp, int memberId, Row value) {
-        if (timestamp < acc.timestamp) {
-            acc.timestamp = timestamp;
-            acc.value = Row.of(timestamp, memberId, value);
+    public void accumulate(Accumulator acc, Long timestamp, Integer memberId, RowData row) {
+        if (acc.timestamp == null || timestamp < acc.timestamp) {
+            acc.setTimestamp(timestamp);
+            acc.setRow(GenericRowData.of(timestamp, memberId, row));
         }
     }
 
     @Override
-    public Row getValue(Accumulator accumulator) {
-        return accumulator.value;
+    public RowData getValue(Accumulator accumulator) {
+        return accumulator.getRow();
     }
 
-    @Override
+/*    @Override
     public TypeInference getTypeInference(DataTypeFactory typeFactory) {
         return TypeInference.newBuilder()
                 // accept a signature (BIGINT, INT, ROW) with arbitrary field types but
@@ -118,10 +110,28 @@ public class EarliestRecordAggFunction extends AggregateFunction<Row, EarliestRe
                             return Optional.of(DataTypes.ROW(fields).bridgedTo(RowData.class));
                         })
                 .build();
-    }
+    }*/
 
     public static class Accumulator {
-        public Long timestamp;
-        public Row value;
+        private Long timestamp;
+
+        @DataTypeHint(value = "ROW<`a` STRING, `b` STRING>", bridgedTo = RowData.class)
+        private RowData row;
+
+        public Long getTimestamp() {
+            return timestamp;
+        }
+
+        public RowData getRow() {
+            return row;
+        }
+
+        public void setTimestamp(Long timestamp) {
+            this.timestamp = timestamp;
+        }
+
+        public void setRow(RowData row) {
+            this.row = row;
+        }
     }
 }
