@@ -162,7 +162,7 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
             final ExecutionGraphFactory executionGraphFactory,
             final ShuffleMaster<?> shuffleMaster,
             final Duration rpcTimeout,
-            final VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider,
+            final ExecutionConfig executionConfig,
             final int defaultMaxParallelism,
             final BlocklistOperations blocklistOperations,
             final HybridPartitionDataConsumeConstraint hybridPartitionDataConsumeConstraint,
@@ -201,7 +201,11 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
         this.logicalTopology = DefaultLogicalTopology.fromJobGraph(jobGraph);
 
         this.vertexParallelismAndInputInfosDecider =
-                checkNotNull(vertexParallelismAndInputInfosDecider);
+                DefaultVertexParallelismAndInputInfosDecider.from(
+                        getExecutionGraph().getAllVertices(),
+                        AdaptiveBatchSchedulerFactory.
+                                getDefaultMaxParallelism(jobMasterConfiguration, executionConfig),
+                        jobMasterConfiguration);
 
         this.forwardGroupsByJobVertexId = checkNotNull(forwardGroupsByJobVertexId);
 
@@ -530,18 +534,6 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                 continue;
             }
 
-            // Check if upper bound parallelism should be computed or not?
-            // maxParallelism should not be computed, if user already sets the maxParallelism
-            // for the source vertex
-            boolean canRescaleMaxParallelism = vertexParallelismStore
-                    .getParallelismInfo(jobVertex.getJobVertexId())
-                    .canRescaleMaxParallelism(jobVertex.getMaxParallelism());
-            int maxParallelism = canRescaleMaxParallelism ?
-                    vertexParallelismAndInputInfosDecider
-                            .computeSourceParallelismUpperBound(
-                                    jobVertex.getJobVertexId(), jobVertex.getMaxParallelism())
-                    : jobVertex.getMaxParallelism();
-
             // We need to wait for the upstream vertex to complete, otherwise, dynamic filtering
             // information will be inaccessible during source parallelism inference.
             Optional<List<BlockingResultInfo>> consumedResultsInfo =
@@ -552,7 +544,10 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                                 .map(
                                         sourceCoordinator ->
                                                 sourceCoordinator.inferSourceParallelismAsync(
-                                                        maxParallelism,
+                                                        vertexParallelismAndInputInfosDecider
+                                                                .computeSourceParallelismUpperBound(
+                                                                        jobVertex.getJobVertexId(),
+                                                                        jobVertex.getMaxParallelism()),
                                                         vertexParallelismAndInputInfosDecider
                                                                 .getDataVolumePerTask()))
                                 .collect(Collectors.toList());

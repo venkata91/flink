@@ -374,7 +374,6 @@ public class DefaultSchedulerBuilder {
                 executionSlotAllocatorFactory,
                 restartBackoffTimeStrategy,
                 delayExecutor,
-                vertexParallelismAndInputInfosDecider,
                 jobRecoveryHandler);
     }
 

@@ -30,6 +30,14 @@ import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.runtime.executiongraph.AccessExecutionGraph;
+import org.apache.flink.runtime.executiongraph.AccessExecutionJobVertex;
+import org.apache.flink.runtime.executiongraph.AccessExecutionVertex;
+import org.apache.flink.runtime.executiongraph.ExecutionGraph;
+import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.runtime.jobgraph.JobVertex;
+import org.apache.flink.runtime.minicluster.MiniCluster;
+import org.apache.flink.runtime.minicluster.MiniClusterConfiguration;
 import org.apache.flink.runtime.scheduler.adaptivebatch.AdaptiveBatchScheduler;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -53,6 +61,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AdaptiveBatchSchedulerITCase {
 
     private static final int DEFAULT_MAX_PARALLELISM = 4;
+    private static final int DEFAULT_SOURCE_PARALLELISM = 128;
     private static final int SOURCE_PARALLELISM_1 = 2;
     private static final int SOURCE_PARALLELISM_2 = 8;
     private static final int NUMBERS_TO_PRODUCE = 10000;
@@ -130,6 +139,68 @@ class AdaptiveBatchSchedulerITCase {
         env.execute();
     }
 
+    @Test
+    void testGlobalDefaultSourceParallelismNotOverridable() {
+        final Configuration configuration = createConfiguration();
+
+        final StreamExecutionEnvironment env =
+                StreamExecutionEnvironment.createLocalEnvironment(configuration);
+        env.setRuntimeMode(RuntimeExecutionMode.BATCH);
+
+        DataStream<Long> source1 =
+                env.fromSource(
+                                new TestingParallelismInferenceNumberSequenceSource(
+                                        0, NUMBERS_TO_PRODUCE - 1, SOURCE_PARALLELISM_1, true),
+                                WatermarkStrategy.noWatermarks(),
+                                "source1");
+        DataStream<Long> source2 =
+                env.fromSource(
+                                new TestingParallelismInferenceNumberSequenceSource(
+                                        0, NUMBERS_TO_PRODUCE - 1, SOURCE_PARALLELISM_2, true),
+                                WatermarkStrategy.noWatermarks(),
+                                "source2");
+
+        source1.union(source2)
+                .rescale()
+                .map(new NumberCounter())
+                .name("map");
+
+        JobGraph jobGraph = env.getStreamGraph().getJobGraph();
+
+        for (JobVertex jobVertex : jobGraph.getVertices()) {
+            if (jobVertex.getName().contains("source2")) {
+                jobVertex.setMaxParallelism(8);
+            }
+        }
+
+        MiniClusterConfiguration miniClusterConfiguration = new MiniClusterConfiguration.Builder()
+                .setConfiguration(configuration)
+                .setNumTaskManagers(1)
+                .setNumSlotsPerTaskManager(1)
+                .build();
+        try (MiniCluster miniCluster = new MiniCluster(miniClusterConfiguration)) {
+            miniCluster.start();
+
+            miniCluster.executeJobBlocking(jobGraph);
+            AccessExecutionGraph
+                    executionGraph = miniCluster.getExecutionGraph(jobGraph.getJobID()).get();
+
+            for (AccessExecutionJobVertex jobVertex : executionGraph.getVerticesTopologically()) {
+                if (jobVertex.getName().contains("source2")) {
+                    assertThat(jobVertex.getParallelism()).isEqualTo(8);
+                    assertThat(jobVertex.getMaxParallelism()).isEqualTo(8);
+                }
+
+                if (jobVertex.getName().contains("source1")) {
+                    assertThat(jobVertex.getParallelism()).isEqualTo(128);
+                    assertThat(jobVertex.getMaxParallelism()).isEqualTo(128);
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private void testSchedulingBase(Boolean useSourceParallelismInference) throws Exception {
         executeJob(useSourceParallelismInference);
 
@@ -189,9 +260,10 @@ class AdaptiveBatchSchedulerITCase {
         } else {
             source1 =
                     env.fromSequence(0, NUMBERS_TO_PRODUCE - 1)
-                            .setParallelism(SOURCE_PARALLELISM_1)
+                            .setParallelism(-1)
                             .name("source1")
-                            .slotSharingGroup(slotSharingGroups.get(0));
+                            .slotSharingGroup(slotSharingGroups.get(0))
+                            .setMaxParallelism(2);
             source2 =
                     env.fromSequence(0, NUMBERS_TO_PRODUCE - 1)
                             .setParallelism(SOURCE_PARALLELISM_2)
@@ -215,6 +287,9 @@ class AdaptiveBatchSchedulerITCase {
         configuration.set(
                 BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_MAX_PARALLELISM,
                 DEFAULT_MAX_PARALLELISM);
+        configuration.set(
+                BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_DEFAULT_SOURCE_PARALLELISM,
+                DEFAULT_SOURCE_PARALLELISM);
         configuration.set(
                 BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_AVG_DATA_VOLUME_PER_TASK,
                 MemorySize.parse("150kb"));
@@ -245,6 +320,7 @@ class AdaptiveBatchSchedulerITCase {
             extends NumberSequenceSource implements DynamicParallelismInference {
         private static final long serialVersionUID = 1L;
         private final int expectedParallelism;
+        private boolean useInferredParallelismUpperBound = false;
 
         public TestingParallelismInferenceNumberSequenceSource(
                 long from, long to, int expectedParallelism) {
@@ -252,8 +328,18 @@ class AdaptiveBatchSchedulerITCase {
             this.expectedParallelism = expectedParallelism;
         }
 
+        public TestingParallelismInferenceNumberSequenceSource(
+                long from, long to, int expectedParallelism, boolean useInferredParallelismUpperBound) {
+            super(from, to);
+            this.expectedParallelism = expectedParallelism;
+            this.useInferredParallelismUpperBound = useInferredParallelismUpperBound;
+        }
+
         @Override
         public int inferParallelism(Context context) {
+            if (useInferredParallelismUpperBound) {
+                return context.getParallelismInferenceUpperBound();
+            }
             return expectedParallelism;
         }
     }
