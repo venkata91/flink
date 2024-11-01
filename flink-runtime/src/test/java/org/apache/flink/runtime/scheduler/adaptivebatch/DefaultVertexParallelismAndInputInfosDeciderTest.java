@@ -46,6 +46,7 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkState;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -313,6 +314,7 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
 
     @Test
     void testSourceJobVertex() {
+        ExecutionJobVertex executionJobVertex = createExecutionJobVertex();
         ParallelismAndInputInfos parallelismAndInputInfos =
                 createDeciderAndDecideParallelismAndInputInfos(
                         MIN_PARALLELISM,
@@ -497,6 +499,20 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
     }
 
     private static ParallelismAndInputInfos createDeciderAndDecideParallelismAndInputInfos(
+            ExecutionJobVertex jobVertex,
+            int minParallelism,
+            int maxParallelism,
+            long dataVolumePerTask,
+            List<BlockingResultInfo> consumedResults) {
+        Map<JobVertexID, ExecutionJobVertex> executionVertices = new HashMap<>();
+        executionVertices.put(jobVertex.getJobVertexId(), jobVertex);
+        final DefaultVertexParallelismAndInputInfosDecider decider =
+                createDecider(executionVertices, minParallelism, maxParallelism, dataVolumePerTask, DEFAULT_SOURCE_PARALLELISM);
+        return decider.decideParallelismAndInputInfosForVertex(jobVertex.getJobVertexId(),
+                consumedResults, -1, minParallelism, maxParallelism);
+    }
+
+    private static ParallelismAndInputInfos createDeciderAndDecideParallelismAndInputInfos(
             int minParallelism,
             int maxParallelism,
             long dataVolumePerTask,
@@ -517,6 +533,7 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
 
         when(vertex.getJobVertexId()).thenReturn(jobVertexID);
         when(vertex.getMaxParallelism()).thenReturn(maxParallelism);
+        when(vertex.canRescaleMaxParallelism(anyInt())).thenReturn(true);
 
         return vertex;
     }
