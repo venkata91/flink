@@ -342,7 +342,7 @@ class AdaptiveBatchSchedulerTest {
         SchedulerBase scheduler =
                 createScheduler(
                         new JobGraph(new JobID(), "test job", source),
-                        createDecider(Collections.emptyMap(),1, 128, 1L, 32),
+                        createDecider(Collections.emptyMap(), 1, 128, 1L, 32),
                         128);
 
         scheduler.startScheduling();
@@ -363,7 +363,7 @@ class AdaptiveBatchSchedulerTest {
         SchedulerBase scheduler =
                 createScheduler(
                         new JobGraph(new JobID(), "test job", source, sink),
-                        createDecider(Collections.emptyMap(),1, 32, 1L, 128),
+                        createDecider(Collections.emptyMap(), 1, 32, 1L, 128),
                         4);
 
         scheduler.startScheduling();

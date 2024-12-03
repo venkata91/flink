@@ -22,7 +22,6 @@ import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.configuration.BatchExecutionOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
-import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.executiongraph.ExecutionVertexInputInfo;
 import org.apache.flink.runtime.executiongraph.IndexRange;
@@ -76,6 +75,7 @@ public class DefaultVertexParallelismAndInputInfosDecider
      * future, we can remove this limitation
      */
     private static final int MAX_NUM_SUBPARTITIONS_PER_TASK_CONSUME = 32768;
+
     private final Map<JobVertexID, ExecutionJobVertex> executionJobVertices;
     private final int globalMaxParallelism;
     private final int globalMinParallelism;

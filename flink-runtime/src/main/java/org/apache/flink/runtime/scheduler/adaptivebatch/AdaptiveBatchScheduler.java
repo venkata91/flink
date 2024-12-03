@@ -203,8 +203,8 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
         this.vertexParallelismAndInputInfosDecider =
                 DefaultVertexParallelismAndInputInfosDecider.from(
                         getExecutionGraph().getAllVertices(),
-                        AdaptiveBatchSchedulerFactory.
-                                getDefaultMaxParallelism(jobMasterConfiguration, executionConfig),
+                        AdaptiveBatchSchedulerFactory.getDefaultMaxParallelism(
+                                jobMasterConfiguration, executionConfig),
                         jobMasterConfiguration);
 
         this.forwardGroupsByJobVertexId = checkNotNull(forwardGroupsByJobVertexId);
@@ -547,7 +547,8 @@ public class AdaptiveBatchScheduler extends DefaultScheduler {
                                                         vertexParallelismAndInputInfosDecider
                                                                 .computeSourceParallelismUpperBound(
                                                                         jobVertex.getJobVertexId(),
-                                                                        jobVertex.getMaxParallelism()),
+                                                                        jobVertex
+                                                                                .getMaxParallelism()),
                                                         vertexParallelismAndInputInfosDecider
                                                                 .getDataVolumePerTask()))
                                 .collect(Collectors.toList());

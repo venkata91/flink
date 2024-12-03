@@ -32,8 +32,6 @@ import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.executiongraph.AccessExecutionGraph;
 import org.apache.flink.runtime.executiongraph.AccessExecutionJobVertex;
-import org.apache.flink.runtime.executiongraph.AccessExecutionVertex;
-import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.minicluster.MiniCluster;
@@ -149,21 +147,18 @@ class AdaptiveBatchSchedulerITCase {
 
         DataStream<Long> source1 =
                 env.fromSource(
-                                new TestingParallelismInferenceNumberSequenceSource(
-                                        0, NUMBERS_TO_PRODUCE - 1, SOURCE_PARALLELISM_1, true),
-                                WatermarkStrategy.noWatermarks(),
-                                "source1");
+                        new TestingParallelismInferenceNumberSequenceSource(
+                                0, NUMBERS_TO_PRODUCE - 1, SOURCE_PARALLELISM_1, true),
+                        WatermarkStrategy.noWatermarks(),
+                        "source1");
         DataStream<Long> source2 =
                 env.fromSource(
-                                new TestingParallelismInferenceNumberSequenceSource(
-                                        0, NUMBERS_TO_PRODUCE - 1, SOURCE_PARALLELISM_2, true),
-                                WatermarkStrategy.noWatermarks(),
-                                "source2");
+                        new TestingParallelismInferenceNumberSequenceSource(
+                                0, NUMBERS_TO_PRODUCE - 1, SOURCE_PARALLELISM_2, true),
+                        WatermarkStrategy.noWatermarks(),
+                        "source2");
 
-        source1.union(source2)
-                .rescale()
-                .map(new NumberCounter())
-                .name("map");
+        source1.union(source2).rescale().map(new NumberCounter()).name("map");
 
         JobGraph jobGraph = env.getStreamGraph().getJobGraph();
 
@@ -173,17 +168,18 @@ class AdaptiveBatchSchedulerITCase {
             }
         }
 
-        MiniClusterConfiguration miniClusterConfiguration = new MiniClusterConfiguration.Builder()
-                .setConfiguration(configuration)
-                .setNumTaskManagers(1)
-                .setNumSlotsPerTaskManager(1)
-                .build();
+        MiniClusterConfiguration miniClusterConfiguration =
+                new MiniClusterConfiguration.Builder()
+                        .setConfiguration(configuration)
+                        .setNumTaskManagers(1)
+                        .setNumSlotsPerTaskManager(1)
+                        .build();
         try (MiniCluster miniCluster = new MiniCluster(miniClusterConfiguration)) {
             miniCluster.start();
 
             miniCluster.executeJobBlocking(jobGraph);
-            AccessExecutionGraph
-                    executionGraph = miniCluster.getExecutionGraph(jobGraph.getJobID()).get();
+            AccessExecutionGraph executionGraph =
+                    miniCluster.getExecutionGraph(jobGraph.getJobID()).get();
 
             for (AccessExecutionJobVertex jobVertex : executionGraph.getVerticesTopologically()) {
                 if (jobVertex.getName().contains("source2")) {
@@ -329,7 +325,10 @@ class AdaptiveBatchSchedulerITCase {
         }
 
         public TestingParallelismInferenceNumberSequenceSource(
-                long from, long to, int expectedParallelism, boolean useInferredParallelismUpperBound) {
+                long from,
+                long to,
+                int expectedParallelism,
+                boolean useInferredParallelismUpperBound) {
             super(from, to);
             this.expectedParallelism = expectedParallelism;
             this.useInferredParallelismUpperBound = useInferredParallelismUpperBound;
