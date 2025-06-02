@@ -354,7 +354,7 @@ public class FileSystemTableSource extends AbstractFileSystemTable
 
     @Override
     public boolean supportsNestedProjection() {
-        return false;
+        return true;
     }
 
     @Override

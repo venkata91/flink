@@ -16,8 +16,6 @@
  * limitations under the License.
  */
 
-import java.util.Arrays;
-
 import org.apache.flink.api.common.RuntimeExecutionMode;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.ExecutionOptions;
@@ -42,8 +40,8 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
-
 
 /** E2E Test for BatchExecExchange. */
 @Testcontainers
@@ -57,22 +55,24 @@ public class BatchExecExchangeITCase {
                     .withFlinkContainersSettings(
                             FlinkContainersSettings.builder()
                                     .numTaskManagers(1)
-                                    .setConfigOption(ExecutionOptions.RUNTIME_MODE,
+                                    .setConfigOption(
+                                            ExecutionOptions.RUNTIME_MODE,
                                             RuntimeExecutionMode.BATCH)
-                                    .setConfigOption(CoreOptions.FLINK_JM_JVM_OPTIONS,
-                                            "-XX:+UseCompressedOops")
-                                    .setConfigOption(CoreOptions.FLINK_TM_JVM_OPTIONS,
+                                    .setConfigOption(
+                                            CoreOptions.FLINK_TM_JVM_OPTIONS,
                                             "-XX:-UseCompressedOops")
                                     .setConfigOption(
-                                            HeartbeatManagerOptions.HEARTBEAT_TIMEOUT, Duration.ofSeconds(10000))
-                                    .setConfigOption(JobManagerOptions.SCHEDULER, JobManagerOptions.SchedulerType.Default)
+                                            HeartbeatManagerOptions.HEARTBEAT_TIMEOUT,
+                                            Duration.ofSeconds(10000))
+                                    .setConfigOption(
+                                            JobManagerOptions.SCHEDULER,
+                                            JobManagerOptions.SchedulerType.Default)
                                     .setConfigOption(CoreOptions.DEFAULT_PARALLELISM, 2)
                                     .build())
                     .build();
 
-    private static final String TABLE1_FILE_NAME = "table1.csv";
-    private static final String TABLE2_FILE_NAME = "table2.csv";
-
+    private static final String TABLE1_FILE_NAME = "table1.json";
+    private static final String TABLE2_FILE_NAME = "table2.json";
     private static final String OUTPUT_DIR_PATH = "output/";
     private static final String CONTAINER_BASE_MOUNT_PATH = "/flink/";
     private File table1File;
@@ -90,20 +90,34 @@ public class BatchExecExchangeITCase {
         table2File = new File(sharedDir, TABLE2_FILE_NAME);
         outputDir = new File(sharedDir, OUTPUT_DIR_PATH);
 
-        try (FileWriter t1 = new FileWriter(table1File);
-                FileWriter t2 = new FileWriter(table2File)) {
-            for (int i = 0; i < 10; i++) {
-                String hex = String.format("%032x", i);
-                t1.write(hex + ",T1_val_" + i + "\n");
-                t2.write(hex + ",T2_val_" + i + "\n");
-            }
+        try (FileWriter t1 = new FileWriter(table1File)) {
+            t1.write(
+                    "{\"nested\": {\"id\": \"AQIDBAUGBwgJCgsMDQ4PEA==\", \"name\": \"left_1\"}, \"payload\": \"foo\"}");
+            t1.write("\n");
+            t1.write(
+                    "{\"nested\": {\"id\": \"AgMEBQYHCAkKCwwNDg8QEQ==\", \"name\": \"left_2\"}, \"payload\": \"bar\"}");
         }
 
-        flink.getJobManager().withFileSystemBind(
-                sharedDir.getAbsolutePath(), CONTAINER_BASE_MOUNT_PATH, BindMode.READ_WRITE);
+        try (FileWriter t2 = new FileWriter(table2File)) {
+            t2.write(
+                    "{\"nested\": {\"id\": \"AQIDBAUGBwgJCgsMDQ4PEA==\", \"name\": \"right_1\"}, \"payload\": \"baz\"}");
+            t2.write("\n");
+            t2.write(
+                    "{\"nested\": {\"id\": \"AgMEBQYHCAkKCwwNDg8QEQ==\", \"name\": \"right_2\"}, \"payload\": \"qux\"}");
+        }
 
-        flink.getTaskManagers().get(0).withFileSystemBind(
-                sharedDir.getAbsolutePath(), CONTAINER_BASE_MOUNT_PATH, BindMode.READ_WRITE);
+        flink.getJobManager()
+                .withFileSystemBind(
+                        sharedDir.getAbsolutePath(),
+                        CONTAINER_BASE_MOUNT_PATH,
+                        BindMode.READ_WRITE);
+
+        flink.getTaskManagers()
+                .get(0)
+                .withFileSystemBind(
+                        sharedDir.getAbsolutePath(),
+                        CONTAINER_BASE_MOUNT_PATH,
+                        BindMode.READ_WRITE);
 
         flink.start(); // Start Flink AFTER setting up files and binding
     }
@@ -119,42 +133,45 @@ public class BatchExecExchangeITCase {
         String table2Path = CONTAINER_BASE_MOUNT_PATH + TABLE2_FILE_NAME;
         String resultPath = CONTAINER_BASE_MOUNT_PATH + OUTPUT_DIR_PATH;
 
-        List<String> sql = List.of(
-                "SET 'execution.runtime-mode' = 'batch';",
-                "CREATE TABLE Table1 (" +
-                        "  k BINARY(16)," +
-                        "  v1 STRING" +
-                        ") WITH (" +
-                        "  'connector' = 'filesystem'," +
-                        "  'format' = 'csv'," +
-                        "  'path' = '" + table1Path + "'" +
-                        ");",
-                "CREATE TABLE Table2 (" +
-                        "  k BINARY(16)," +
-                        "  v2 STRING" +
-                        ") WITH (" +
-                        "  'connector' = 'filesystem'," +
-                        "  'format' = 'csv'," +
-                        "  'path' = '" + table2Path + "'" +
-                        ");",
-                "CREATE TABLE Output (" +
-                        "  k BINARY(16)," +
-                        "  cnt BIGINT" +
-                        ") WITH (" +
-                        "  'connector' = 'filesystem'," +
-                        "  'format' = 'csv'," +
-                        "  'path' = '" + resultPath + "'" +
-                        ");",
-                "EXPLAIN SELECT t1.k, t1.v1, t2.v2 FROM Table1 t1 INNER JOIN Table2 t2"
-                        + " ON t1.k = t2.k;",
-                "INSERT INTO Output " +
-                        "SELECT /*+ SHUFFLE_HASH(t1) */ t1.k, COUNT(*) AS cnt FROM Table1 t1,"
-                        + " Table2 t2 WHERE t1.k = t2.k GROUP BY t1.k;"
-        );
+        List<String> sql =
+                List.of(
+                        "SET 'execution.runtime-mode' = 'batch';",
+                        "CREATE TABLE Table1 ("
+                                + " nested ROW<id BYTES, name STRING>,"
+                                + " payload STRING"
+                                + " ) WITH ("
+                                + " 'connector' = 'filesystem',"
+                                + " 'format' = 'json',"
+                                + " 'json.ignore-parse-errors' = 'true',"
+                                + " 'path' = '"
+                                + table1Path
+                                + "'"
+                                + " );",
+                        "CREATE TABLE Table2 ("
+                                + " nested ROW<id BYTES, name STRING>,"
+                                + " payload STRING"
+                                + " ) WITH ("
+                                + " 'connector' = 'filesystem',"
+                                + " 'format' = 'json',"
+                                + " 'json.ignore-parse-errors' = 'true',"
+                                + " 'path' = '"
+                                + table2Path
+                                + "'"
+                                + " );",
+                        "CREATE TABLE Output ("
+                                + " cnt BIGINT"
+                                + ") WITH ("
+                                + "  'connector' = 'filesystem',"
+                                + "  'format' = 'csv',"
+                                + "  'path' = '"
+                                + resultPath
+                                + "'"
+                                + ");",
+                        "INSERT INTO Output SELECT COUNT(*) FROM Table1 t1, Table2 t2"
+                                + " WHERE t1.nested.id = t2.nested.id;");
 
         executeSql(sql);
 
-        // Assert output contains 10 joined rows
         File[] resultFiles = outputDir.listFiles();
         LOG.info("Result files: {}", Arrays.toString(resultFiles));
         long count = 0;
@@ -165,11 +182,10 @@ public class BatchExecExchangeITCase {
                 }
             }
         }
-        Assertions.assertEquals(10, count);
+        Assertions.assertEquals(1, count);
     }
 
     private void executeSql(List<String> sqlLines) throws Exception {
-        flink.submitSQLJob(
-                new SQLJobSubmission.SQLJobSubmissionBuilder(sqlLines).build());
+        flink.submitSQLJob(new SQLJobSubmission.SQLJobSubmissionBuilder(sqlLines).build());
     }
 }

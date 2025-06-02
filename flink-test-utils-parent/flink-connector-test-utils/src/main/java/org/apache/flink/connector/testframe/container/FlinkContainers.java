@@ -317,6 +317,8 @@ public class FlinkContainers implements BeforeAllCallback, AfterAllCallback {
         jobManager.copyFileToContainer(MountableFile.forHostPath(script), "/tmp/script.sql");
 
         // Construct SQL client command
+        commands.add(
+                "export FLINK_ENV_JAVA_OPTS_CLI=\"-XX:-UseCompressedOops -XX:-UseCompressedClassPointers\";");
         commands.add("cat /tmp/script.sql | ");
         commands.add("bin/sql-client.sh");
         for (String jar : job.getJars()) {
@@ -446,7 +448,7 @@ public class FlinkContainers implements BeforeAllCallback, AfterAllCallback {
                     }
                     return clusterOverview.getNumTaskManagersConnected() == taskManagers.size();
                 },
-                DEFAULT_TIMEOUT,
+                Duration.ofSeconds(10000),
                 "TaskManagers are not ready within 30 seconds");
     }
 

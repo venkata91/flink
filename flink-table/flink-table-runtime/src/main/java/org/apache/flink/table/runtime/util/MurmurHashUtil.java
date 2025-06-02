@@ -18,11 +18,11 @@
 
 package org.apache.flink.table.runtime.util;
 
+import org.apache.flink.core.memory.MemorySegment;
+
 import com.esotericsoftware.minlog.Log;
 
 import java.util.Arrays;
-
-import org.apache.flink.core.memory.MemorySegment;
 
 import static org.apache.flink.core.memory.MemoryUtils.UNSAFE;
 
@@ -55,8 +55,13 @@ public final class MurmurHashUtil {
      */
     public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes) {
         Log.info("Array base offset in TM " + UNSAFE.arrayBaseOffset(byte[].class));
-        Log.info(String.format("MurmurHashUtil hashUnsafeBytes: base = {}, offset = {},"
-                + " lengthInBytes = {}", Arrays.toString((byte[]) base), offset, lengthInBytes));
+        Log.info(
+                String.format(
+                        "MurmurHashUtil hashUnsafeBytes: base = {}, offset = {},"
+                                + " lengthInBytes = {}",
+                        Arrays.toString((byte[]) base),
+                        offset,
+                        lengthInBytes));
         return hashUnsafeBytes(base, offset, lengthInBytes, DEFAULT_SEED);
     }
 
