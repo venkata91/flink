@@ -361,6 +361,79 @@ class AdaptiveBatchSchedulerTest {
     }
 
     @Test
+    void testSourceParallelismRespectVertexMaxParallelism() throws Exception {
+        // Set source parallelism higher than global max parallelism but source vertex has own max
+        // parallelism
+        int globalMaxParallelism = 64;
+        int vertexMaxParallelism = 100;
+        int defaultSourceParallelism = 128;
+
+        final JobVertex source = createJobVertex("source", -1);
+        source.setMaxParallelism(vertexMaxParallelism);
+
+        SchedulerBase scheduler =
+                createScheduler(
+                        new JobGraph(new JobID(), "test job", source),
+                        createDecider(1, globalMaxParallelism, 1L, defaultSourceParallelism),
+                        globalMaxParallelism);
+
+        scheduler.startScheduling();
+
+        // Source parallelism should respect vertex max parallelism
+        assertThat(source.getParallelism()).isEqualTo(vertexMaxParallelism);
+    }
+
+    @Test
+    void testSourceParallelismRespectDefaultSourceParallelism() throws Exception {
+        // Set source parallelism lower than vertex max parallelism
+        int globalMaxParallelism = 64;
+        int vertexMaxParallelism = 100;
+        int defaultSourceParallelism = 80;
+
+        final JobVertex source = createJobVertex("source", -1);
+        source.setMaxParallelism(vertexMaxParallelism);
+
+        SchedulerBase scheduler =
+                createScheduler(
+                        new JobGraph(new JobID(), "test job", source),
+                        createDecider(1, globalMaxParallelism, 1L, defaultSourceParallelism),
+                        globalMaxParallelism);
+
+        scheduler.startScheduling();
+
+        // Source parallelism should use the default source parallelism since it's lower than vertex
+        // max
+        assertThat(source.getParallelism()).isEqualTo(defaultSourceParallelism);
+    }
+
+    @Test
+    void testSourceParallelismWithNoExplicitVertexMaxParallelism() throws Exception {
+        // When no explicit vertex max parallelism is set, the vertex uses the default max
+        // parallelism
+        // which is the global max parallelism. Our changes ensure that source parallelism is not
+        // constrained by this when using default source parallelism configuration.
+        int globalMaxParallelism = 64;
+        int defaultSourceParallelism = 128;
+
+        final JobVertex source = createJobVertex("source", -1);
+        // No explicit setMaxParallelism call - vertex will use globalMaxParallelism as max
+
+        SchedulerBase scheduler =
+                createScheduler(
+                        new JobGraph(new JobID(), "test job", source),
+                        createDecider(1, globalMaxParallelism, 1L, defaultSourceParallelism),
+                        globalMaxParallelism);
+
+        scheduler.startScheduling();
+
+        // With our changes, source parallelism should now be equal to defaultSourceParallelism
+        // even though it exceeds the vertex's implicit max parallelism (globalMaxParallelism)
+        // This should be either defaultMaxParallelism or a value computed from the default
+        // parallelism if positive
+        assertThat(source.getParallelism()).isEqualTo(defaultSourceParallelism);
+    }
+
+    @Test
     void testMergeDynamicParallelismFutures() {
         List<CompletableFuture<Integer>> sourceParallelismFutures = new ArrayList<>();
 

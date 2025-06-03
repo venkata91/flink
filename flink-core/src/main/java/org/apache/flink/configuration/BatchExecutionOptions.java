@@ -106,13 +106,13 @@ public class BatchExecutionOptions {
                     .withDescription(
                             Description.builder()
                                     .text(
-                                            "The default parallelism of source vertices or the upper bound of source parallelism "
-                                                    + "to set adaptively if %s has been set to %s. Note that %s will be used if this configuration is not configured. "
+                                            "The default parallelism of source vertices. Unlike non-source vertices, source parallelism "
+                                                    + "is not constrained by %s and can be set independently. "
+                                                    + "This is especially useful for source vertices that need to process large amounts of data. "
+                                                    + "Note that source vertices will still respect their own max parallelism setting if specified. "
+                                                    + "If this configuration is not set, %s will be used. "
                                                     + "If %s is not set either, then the default parallelism set via %s will be used instead.",
-                                            code(SCHEDULER.key()),
-                                            code(
-                                                    JobManagerOptions.SchedulerType.AdaptiveBatch
-                                                            .name()),
+                                            code(ADAPTIVE_AUTO_PARALLELISM_MAX_PARALLELISM.key()),
                                             code(ADAPTIVE_AUTO_PARALLELISM_MAX_PARALLELISM.key()),
                                             code(ADAPTIVE_AUTO_PARALLELISM_MAX_PARALLELISM.key()),
                                             code(DEFAULT_PARALLELISM.key()))

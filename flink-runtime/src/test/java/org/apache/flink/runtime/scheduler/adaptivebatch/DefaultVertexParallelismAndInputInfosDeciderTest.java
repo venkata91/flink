@@ -408,17 +408,36 @@ class DefaultVertexParallelismAndInputInfosDeciderTest {
     }
 
     @Test
-    void testComputeSourceParallelismUpperBoundNotExceedMaxParallelism() {
+    void testComputeSourceParallelismRespectVertexMaxParallelism() {
         Configuration configuration = new Configuration();
+        int sourceParallelism = VERTEX_MAX_PARALLELISM * 2;
         configuration.set(
                 BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_DEFAULT_SOURCE_PARALLELISM,
-                VERTEX_MAX_PARALLELISM * 2);
+                sourceParallelism);
         VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider =
                 createDefaultVertexParallelismAndInputInfosDecider(MAX_PARALLELISM, configuration);
+        // Source parallelism should be constrained by vertex max parallelism but not by global max
+        // parallelism
         assertThat(
                         vertexParallelismAndInputInfosDecider.computeSourceParallelismUpperBound(
                                 new JobVertexID(), VERTEX_MAX_PARALLELISM))
                 .isEqualTo(VERTEX_MAX_PARALLELISM);
+    }
+
+    @Test
+    void testComputeSourceParallelismLowerThanVertexMaxParallelism() {
+        Configuration configuration = new Configuration();
+        int sourceParallelism = VERTEX_MAX_PARALLELISM / 2;
+        configuration.set(
+                BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_DEFAULT_SOURCE_PARALLELISM,
+                sourceParallelism);
+        VertexParallelismAndInputInfosDecider vertexParallelismAndInputInfosDecider =
+                createDefaultVertexParallelismAndInputInfosDecider(MAX_PARALLELISM, configuration);
+        // Source parallelism should be used since it's less than vertex max parallelism
+        assertThat(
+                        vertexParallelismAndInputInfosDecider.computeSourceParallelismUpperBound(
+                                new JobVertexID(), VERTEX_MAX_PARALLELISM))
+                .isEqualTo(sourceParallelism);
     }
 
     private static void checkAllToAllJobVertexInputInfo(
