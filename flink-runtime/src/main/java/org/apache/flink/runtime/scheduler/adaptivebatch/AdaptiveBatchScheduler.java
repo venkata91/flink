@@ -143,6 +143,8 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
 
     private final int defaultMaxParallelism;
 
+    private final Configuration jobMasterConfiguration;
+
     public AdaptiveBatchScheduler(
             final Logger log,
             final AdaptiveExecutionHandler adaptiveExecutionHandler,
@@ -220,6 +222,8 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
         this.hybridPartitionDataConsumeConstraint = hybridPartitionDataConsumeConstraint;
 
         this.sourceParallelismFuturesByJobVertexId = new HashMap<>();
+
+        this.jobMasterConfiguration = jobMasterConfiguration;
 
         speculativeExecutionHandler =
                 createSpeculativeExecutionHandler(
@@ -613,6 +617,17 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
                 continue;
             }
 
+//            // Check if upper bound parallelism should be computed or not?
+//            // maxParallelism should not be computed, if user already sets the maxParallelism
+//            // for the source vertex
+//            int defaultSourceParallelism = jobMasterConfiguration.get(
+//                    BatchExecutionOptions.ADAPTIVE_AUTO_PARALLELISM_DEFAULT_SOURCE_PARALLELISM);
+//            boolean canRescaleMaxParallelism = jobVertex
+//                    .canRescaleMaxParallelism(defaultSourceParallelism);
+//            int maxParallelism = canRescaleMaxParallelism ?
+//                    )
+//                    : jobVertex.getMaxParallelism();
+
             // We need to wait for the upstream vertex to complete, otherwise, dynamic filtering
             // information will be inaccessible during source parallelism inference.
             Optional<List<BlockingInputInfo>> consumedResultsInfo =
@@ -623,11 +638,9 @@ public class AdaptiveBatchScheduler extends DefaultScheduler implements JobGraph
                                 .map(
                                         sourceCoordinator ->
                                                 sourceCoordinator.inferSourceParallelismAsync(
-                                                        vertexParallelismAndInputInfosDecider
-                                                                .computeSourceParallelismUpperBound(
-                                                                        jobVertex.getJobVertexId(),
-                                                                        jobVertex
-                                                                                .getMaxParallelism()),
+                        vertexParallelismAndInputInfosDecider
+                                .computeSourceParallelismUpperBound(
+                                        jobVertex.getJobVertexId(), jobVertex.getMaxParallelism()),
                                                         vertexParallelismAndInputInfosDecider
                                                                 .getDataVolumePerTask()))
                                 .collect(Collectors.toList());

@@ -369,7 +369,7 @@ class AdaptiveBatchSchedulerTest {
         int defaultSourceParallelism = 128;
 
         final JobVertex source = createJobVertex("source", -1);
-        source.setMaxParallelism(vertexMaxParallelism);
+        // source.setMaxParallelism(vertexMaxParallelism);
 
         SchedulerBase scheduler =
                 createScheduler(
