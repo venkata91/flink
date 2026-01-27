@@ -176,6 +176,18 @@ public class OptimizerConfigOptions {
                             "A flag to enable or disable the runtime filter. "
                                     + "When it is true, the optimizer will try to inject a runtime filter for eligible join.");
 
+    @Documentation.TableOption(execMode = Documentation.ExecMode.BATCH)
+    public static final ConfigOption<Boolean> TABLE_OPTIMIZER_AURON_ENABLED =
+            key("table.optimizer.auron.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Enables Auron native execution for supported batch operators. "
+                                    + "When enabled, eligible operations (Parquet scan + filter + projection) "
+                                    + "will be automatically converted to use Auron's high-performance "
+                                    + "native execution engine instead of standard Flink operators. "
+                                    + "Requires auron-flink-extension library on the classpath.");
+
     /**
      * The data volume of build side needs to be under this value. If the data volume of build side
      * is too large, the building overhead will be too large, which may lead to a negative impact on
