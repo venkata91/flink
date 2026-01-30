@@ -24,7 +24,9 @@ import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeGraph;
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecCalc;
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecNode;
+import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecSink;
 import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecTableSourceScan;
+import org.apache.flink.table.planner.plan.nodes.exec.spec.DynamicTableSinkSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.spec.DynamicTableSourceSpec;
 
 import org.slf4j.Logger;
@@ -141,6 +143,9 @@ public class AuronExecNodeGraphProcessor implements ExecNodeGraphProcessor {
     /**
      * Checks if this node and its inputs can be converted to Auron execution.
      *
+     * <p>This method supports end-to-end native execution by detecting complete chains from source
+     * to sink that can be executed entirely in the native engine.
+     *
      * @param node The node to check
      * @param inputs The converted input nodes
      * @return true if the pattern is supported by Auron
@@ -151,7 +156,19 @@ public class AuronExecNodeGraphProcessor implements ExecNodeGraphProcessor {
             return false;
         }
 
-        // Pattern 1: BatchExecCalc (filter/projection) on top of Parquet scan
+        // Pattern 1: End-to-end native execution (Source -> [Transforms] -> Sink)
+        // Check if this is a Parquet sink with native-compatible input chain
+        if (node instanceof BatchExecSink && inputs.size() == 1) {
+            if (isParquetSink((BatchExecSink) node)) {
+                // The input chain has already been converted if possible
+                // Check if the input is either:
+                // 1. Already an Auron node (native chain)
+                // 2. A native-compatible node (source or calc on source)
+                return isNativeCompatibleChain(inputs.get(0));
+            }
+        }
+
+        // Pattern 2: BatchExecCalc (filter/projection) on top of Parquet scan
         if (node instanceof BatchExecCalc && inputs.size() == 1) {
             ExecNode<?> input = inputs.get(0);
             if (input instanceof CommonExecTableSourceScan) {
@@ -159,11 +176,64 @@ public class AuronExecNodeGraphProcessor implements ExecNodeGraphProcessor {
             }
         }
 
-        // Pattern 2: Just Parquet scan (no calc)
+        // Pattern 3: Just Parquet scan (no calc)
         if (node instanceof CommonExecTableSourceScan) {
             return isParquetSource((CommonExecTableSourceScan) node);
         }
 
+        return false;
+    }
+
+    /**
+     * Checks if the given node is part of a native-compatible execution chain. This includes Auron
+     * nodes and native-compatible Flink nodes.
+     */
+    private boolean isNativeCompatibleChain(ExecNode<?> node) {
+        // Already converted to Auron
+        if (node.getClass().getName().equals(AURON_BATCH_EXEC_NODE_CLASS)) {
+            return true;
+        }
+
+        // Parquet source - native compatible
+        if (node instanceof CommonExecTableSourceScan) {
+            return isParquetSource((CommonExecTableSourceScan) node);
+        }
+
+        // Calc on native-compatible input
+        if (node instanceof BatchExecCalc && node.getInputEdges().size() == 1) {
+            ExecNode<?> input = node.getInputEdges().get(0).getSource();
+            return isNativeCompatibleChain(input);
+        }
+
+        return false;
+    }
+
+    /**
+     * Checks if the table sink is a Parquet file sink.
+     *
+     * @param sink The sink node
+     * @return true if this is a Parquet sink
+     */
+    private boolean isParquetSink(BatchExecSink sink) {
+        try {
+            DynamicTableSinkSpec sinkSpec = sink.getTableSinkSpec();
+
+            // Check if this is a filesystem sink with Parquet format
+            // The spec contains the connector and format information
+            // For now, be optimistic - assume filesystem sinks are Parquet
+            LOG.debug(
+                    "Detected sink node, checking if Parquet-compatible: {}",
+                    sink.getDescription());
+
+            // TODO: More precise detection by checking:
+            // - connector = 'filesystem'
+            // - format = 'parquet'
+            // This would require accessing the catalog table options
+
+            return true; // Optimistic - will fall back if conversion fails
+        } catch (Exception e) {
+            LOG.debug("Error checking if sink is Parquet: {}", e.getMessage());
+        }
         return false;
     }
 

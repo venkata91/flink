@@ -21,10 +21,12 @@ package org.apache.flink.table.planner.plan.nodes.exec.batch;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.delegation.PlannerBase;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
+import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.processor.ProcessorContext;
 import org.apache.flink.table.types.logical.RowType;
 
@@ -32,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -79,12 +82,15 @@ public class AuronBatchExecNode extends ExecNodeBase<RowData> implements BatchEx
                 ExecNodeContext.newPersistedConfig(
                         AuronBatchExecNode.class,
                         context.getPlanner().getTableConfig().getConfiguration()),
-                Collections.emptyList(), // No input properties for now
+                createInputProperties(originalInputs), // Create InputProperty for each input
                 originalNode.getOutputType(),
                 "Auron[" + originalNode.getDescription() + "]");
 
         this.originalNode = originalNode;
         this.originalInputs = originalInputs;
+
+        // Set the input edges to link this node to its inputs
+        setInputEdges(createInputEdges(originalInputs));
 
         LOG.info(
                 "Created AuronBatchExecNode wrapping: {} with {} inputs",
@@ -160,5 +166,38 @@ public class AuronBatchExecNode extends ExecNodeBase<RowData> implements BatchEx
      */
     public List<ExecNode<?>> getOriginalInputs() {
         return originalInputs;
+    }
+
+    /**
+     * Creates a list of InputProperty for the given input nodes.
+     * Each input gets a default InputProperty.
+     *
+     * @param inputs The input nodes
+     * @return List of InputProperty objects
+     */
+    private static List<InputProperty> createInputProperties(List<ExecNode<?>> inputs) {
+        List<InputProperty> inputProperties = new ArrayList<>(inputs.size());
+        for (int i = 0; i < inputs.size(); i++) {
+            inputProperties.add(InputProperty.DEFAULT);
+        }
+        return inputProperties;
+    }
+
+    /**
+     * Creates a list of ExecEdge for the given input nodes.
+     * Each edge uses FORWARD shuffle and PIPELINED exchange mode.
+     *
+     * @param inputs The input nodes
+     * @return List of ExecEdge objects
+     */
+    private List<ExecEdge> createInputEdges(List<ExecNode<?>> inputs) {
+        List<ExecEdge> inputEdges = new ArrayList<>(inputs.size());
+        for (ExecNode<?> input : inputs) {
+            inputEdges.add(ExecEdge.builder()
+                    .source(input)
+                    .target(this)
+                    .build());
+        }
+        return inputEdges;
     }
 }
